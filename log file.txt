@@ -1,0 +1,13 @@
+log file
+
+- with random walk, sample everything jointly: we make local moves but it is hard to move the sampler around
+- without random walk, sample everything jointly: we make bold moves but it is hard to move the sampler around. At least, the sampler gets stuck into good regions here. How many theta.vals? If we choose few, we are more likely to randomly find good regions. If we choose many, sampler can potentially move around more freely but it is hard to find good regions.
+- sample individual theta values one at a time: this is an option but it is very computationally intensive because of the multiple inverses that have to be calculated
+
+Some ideas:
+- for every new proposal, check if we have already calculated the inverse. If not, calculate the inverse and store it. If yes, use stored inverse.
+#--------------------------
+2017 05 23
+
+alphas are really good with wrong correlation structure
+current code does not work. Try Hamiltonian MCMC? Or Expectation-Propagation?

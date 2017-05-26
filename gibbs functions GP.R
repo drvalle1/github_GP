@@ -53,26 +53,27 @@ create.dmat=function(dat){
     cond=dat$loc.id==i
     dmat[cond,i]=1
   }
-  dmat
+  Matrix(dmat)
   
 #   teste=apply(dmat,2,sum)
 #   plot(teste,table(dat$loc.id))
 #   unique(teste-table(dat$loc.id))
 }
 #--------------------------
-create.Sigma=function(theta,covmat,nclust){
+create.K=function(theta,covmat,nclust,nparam){
   tmp=matrix(0,nclust,nclust)
   for (i in 1:nparam){
-    tmp=tmp+(covmat[[i]]/theta[i])
+    tmp=tmp+theta[i]*covmat[[i]]
   }
   exp(-tmp)
 }
 #--------------------------
 update.alpha=function(param){
-  prec=dtd+(1/param$sig2)*param$invSigma
-  var1=solve(prec)
+  prec=dtd+(1/param$sig2)*param$invK
+  var1=as.matrix(solve(prec))
   err=param$z-xmat%*%param$betas
   pmedia=t(dmat)%*%err
+  if (!isSymmetric(var1)) var1=(var1+t(var1))/2
   t(rmvnorm(1,var1%*%pmedia,var1))
 }
 #--------------------------
@@ -87,7 +88,7 @@ update.betas=function(param){
 update.sig2=function(param){
   a=(nclust+2*a.sig2)/2
   err=param$alpha
-  b=b.sig2+(t(err)%*%param$invSigma%*%err/2)  
+  b=b.sig2+(t(err)%*%param$invK%*%err/2)  
   1/rgamma(1,a,b)
 }
 #--------------------------
@@ -104,45 +105,62 @@ update.z=function(param){
   z
 }
 #--------------------------
-update.theta=function(param){
-  theta.new=theta.old=param$theta
-
-  #I need to add probabilities associated with the bounds
-  p=rep(NA,nparam)
+get.inverse=function(D,sig2,K,dtd){
+  med=solve(diag(1,nclust)+sig2*K%*%dtd)
+  zzz=-sig2*D%*%med%*%K%*%t(D)
+  diag(zzz)=1+diag(zzz)
+  zzz
+}
+#--------------------------
+update.theta=function(param,jump){
+  theta.orig=theta.new=theta.old=param$theta
+  err=param$z-xmat%*%param$betas
+  
   for (i in 1:nparam){
     ind=which(theta.old[i]==theta.vals)
-    delta=sample(c(-1,0,1),size=1)  #move one step
-    ind1=ind+delta
-    if (ind1>ntheta.vals) ind1=ntheta.vals
-    if (ind1<1)           ind1=1
-    
-    #special cases
-    old.new=new.old=1
-    if (ind==ntheta.vals & ind1==ntheta.vals-1) {old.new=1/2; new.old=1/3}
-    if (ind==ntheta.vals-1 & ind1==ntheta.vals) {old.new=1/3; new.old=1/2} 
-    if (ind==1 & ind1==2)             {old.new=1/2; new.old=1/3}
-    if (ind1==2 & ind==1)             {old.new=1/3; new.old=1/2}
-    p[i]=new.old/old.new
-    
+    seq1=(-jump[i]):jump[i]
+    ind1=ind+sample(seq1,size=1)
+
+    #make reflection
+    if (ind1>ntheta.vals) {e=ind1-ntheta.vals; ind1=ntheta.vals-e}
+    if (ind1<1)           {e=1-ind1;           ind1=1+e}
+
     theta.new[i]=theta.vals[ind1]
   }
-  Sigma.new=create.Sigma(theta.new,covmat,nclust)
-  invSigma.new=solve(Sigma.new)
   
-  p1.old=determinant(param$Sigma,logarithm = T)$modulus[[1]]
-  p1.new=determinant(Sigma.new  ,logarithm = T)$modulus[[1]]
+  #calculate stuff
+  K.old=param$K
+  invK.old=param$invK
+  K.new=create.K(theta.new,covmat,nclust,nparam)
+  invK.new=solve(K.new)
+
+  #---------------------
+  tmp=(1/param$sig2)*invK.old+dtd
+  p1.old=determinant(tmp,logarithm = T)$modulus[[1]]+
+         determinant(param$sig2*K.old,logarithm = T)$modulus[[1]]
+  inv.old=get.inverse(dmat,param$sig2,K.old,dtd)
   
-  med.old=t(param$alpha)%*%param$invSigma%*%param$alpha/2
-  med.new=t(param$alpha)%*%invSigma.new%*%param$alpha/2
+  tmp=(1/param$sig2)*invK.new+dtd
+  p1.new=determinant(tmp,logarithm = T)$modulus[[1]]+
+         determinant(param$sig2*K.new,logarithm = T)$modulus[[1]]
+  inv.new=get.inverse(dmat,param$sig2,K.new,dtd)
   
-  p2.old=(nclust+2*a.sig2)*log(med.old+b.sig2)
-  p2.new=(nclust+2*a.sig2)*log(med.new+b.sig2)
+  # zzz=Matrix(diag(1,nobs))+param$sig2*dmat%*%K.new%*%t(dmat)
+  # zzz1=solve(zzz)
+  # hist(data.matrix(inv.new)-data.matrix(zzz1))
+  # determinant(zzz,logarithm = T)$modulus[[1]]
+  
+  p2.old=t(err)%*%inv.old%*%err
+  p2.new=t(err)%*%inv.new%*%err
+  #---------------------
   pold=-(1/2)*(p1.old+p2.old)
   pnew=-(1/2)*(p1.new+p2.new)
-  
-  k=acceptMH(pold,pnew+sum(log(p)),theta.old,theta.new,T)  
-  if (k$accept==0) fim=list(theta=param$theta,Sigma=param$Sigma,invSigma=param$invSigma,accept=0)
-  if (k$accept==1) fim=list(theta=theta.new  ,Sigma=Sigma.new  ,invSigma=invSigma.new  ,accept=1)
-  fim
+
+  k=acceptMH(pold,pnew,theta.old,theta.new,T)
+  theta.old=k$x
+
+  if (k$accept==0) {K=K.old; invK=invK.old}
+  if (k$accept==1) {K=K.new; invK=invK.new}
+
+  list(theta=theta.old,K=K,invK=invK,accept=rep(k$accept,nparam))
 }
-  

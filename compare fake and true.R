@@ -4,7 +4,7 @@ compare1=function(true,estim){
   lines(rango,rango)
 }
 
-seq1=1000:9900
+seq1=1000:3700
 compare1(alpha.true,colMeans(vec.alpha[seq1,]))
 compare1(theta.true,param$theta)
 compare1(z.true,param$z)
@@ -19,3 +19,22 @@ abline(v=sigma2.true)
 #look at beta:
 plot(vec.betas[seq1],type='l')
 abline(h=betas.true,col='red')
+
+#look more closely to theta:
+seq1=1:3700
+par(mfrow=c(3,3),mar=rep(1,4))
+for (i in 1:nparam) {
+  x=vec.theta[seq1,i]
+  plot(x,type='l') #,ylim=quantile(x,c(0.01,0.99))
+}
+cor(vec.theta[seq1,])
+
+theta.med=apply(vec.theta[seq1,],2,median,na.rm=T)
+par(mfrow=c(1,1),mar=rep(4,4))
+rango=range(c(theta.true,theta.med))
+plot(theta.true,theta.med,xlim=rango,ylim=rango)
+lines(rango,rango)
+
+Sigma.new=create.K(theta.med,covmat,nclust,nparam)
+Sigma.true=create.K(theta.true,covmat,nclust,nparam)
+plot(Sigma.true,Sigma.new)
