@@ -68,7 +68,7 @@ create.K=function(theta,covmat,nclust,nparam){
   exp(-tmp)
 }
 #--------------------------
-update.alpha=function(param){
+update.alpha=function(param,dtd,xmat,dmat){
   prec=dtd+(1/param$sig2)*param$invK
   var1=as.matrix(solve(prec))
   err=param$z-xmat%*%param$betas
@@ -77,7 +77,7 @@ update.alpha=function(param){
   t(rmvnorm(1,var1%*%pmedia,var1))
 }
 #--------------------------
-update.betas=function(param){
+update.betas=function(param,xtx,xmat,dat){
   prec=xtx+diag(1,ncol(xmat))
   var1=solve(prec)
   err=param$z-param$alpha[dat$loc.id]
@@ -85,14 +85,14 @@ update.betas=function(param){
   t(rmvnorm(1,var1%*%pmedia,var1))
 }
 #--------------------------
-update.sig2=function(param){
+update.sig2=function(param,nclust,a.sig2,b.sig2){
   a=(nclust+2*a.sig2)/2
   err=param$alpha
   b=b.sig2+(t(err)%*%param$invK%*%err/2)  
   1/rgamma(1,a,b)
 }
 #--------------------------
-update.z=function(param){
+update.z=function(param,dat,xmat){
   media=param$alpha[dat$loc.id]+xmat%*%param$betas
 
   z=rep(NA,nrow(dat))
@@ -105,14 +105,14 @@ update.z=function(param){
   z
 }
 #--------------------------
-get.inverse=function(D,sig2,K,dtd){
+get.inverse=function(D,sig2,K,dtd,nclust){
   med=solve(diag(1,nclust)+sig2*K%*%dtd)
   zzz=-sig2*D%*%med%*%K%*%t(D)
   diag(zzz)=1+diag(zzz)
   zzz
 }
 #--------------------------
-update.theta=function(param,jump){
+update.theta=function(param,jump,xmat,nparam,ntheta.vals,nclust,dmat,dtd,theta.vals,covmat){
   theta.orig=theta.new=theta.old=param$theta
   err=param$z-xmat%*%param$betas
   
@@ -138,12 +138,12 @@ update.theta=function(param,jump){
   tmp=(1/param$sig2)*invK.old+dtd
   p1.old=determinant(tmp,logarithm = T)$modulus[[1]]+
          determinant(param$sig2*K.old,logarithm = T)$modulus[[1]]
-  inv.old=get.inverse(dmat,param$sig2,K.old,dtd)
+  inv.old=get.inverse(dmat,param$sig2,K.old,dtd,nclust)
   
   tmp=(1/param$sig2)*invK.new+dtd
   p1.new=determinant(tmp,logarithm = T)$modulus[[1]]+
          determinant(param$sig2*K.new,logarithm = T)$modulus[[1]]
-  inv.new=get.inverse(dmat,param$sig2,K.new,dtd)
+  inv.new=get.inverse(dmat,param$sig2,K.new,dtd,nclust)
   
   # zzz=Matrix(diag(1,nobs))+param$sig2*dmat%*%K.new%*%t(dmat)
   # zzz1=solve(zzz)
